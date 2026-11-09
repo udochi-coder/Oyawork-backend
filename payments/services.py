@@ -125,7 +125,8 @@ def _paystack(method, path, **kwargs):
 def start_checkout(user, amount, purpose, method, booking=None):
     """Create a Paystack checkout and return the PaymentIntent (with authorization_url)."""
     reference = new_reference("OWP")
-    channels = ["bank_transfer"] if method == "bank_transfer" else ["card"]
+    # Which Paystack payment options checkout offers (PAYSTACK_CHANNELS, default: bank transfer only).
+    channels = settings.PAYSTACK_CHANNELS
     email = user.email or f"{user.phone_number}@users.oyawork.app"
     callback = f"{settings.FRONTEND_URL}/payments/callback"
     data = _paystack(
