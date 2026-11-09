@@ -38,3 +38,16 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+
+def server_error(request, *args, **kwargs):
+    """API callers get JSON instead of Django's HTML error page. The full traceback is still in the Render logs."""
+    from django.http import JsonResponse
+    from django.views.defaults import server_error as html_server_error
+
+    if request.path.startswith("/api/"):
+        return JsonResponse({"error": "Something went wrong on our side. Please try again in a moment."}, status=500)
+    return html_server_error(request, *args, **kwargs)
+
+
+handler500 = server_error

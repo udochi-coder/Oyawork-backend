@@ -95,3 +95,16 @@ class BrevoRequestTest(TestCase):
         with mock.patch("requests.post") as post:
             self.assertFalse(send_email("a@b.com", "Hi", "x"))
         post.assert_not_called()
+
+
+class StorageFailureTest(TestCase):
+    def test_signup_survives_photo_upload_failure(self):
+        from tests.test_flow import image_file
+
+        cache.clear()
+        with mock.patch("django.core.files.storage.FileSystemStorage.save", side_effect=RuntimeError("403 Forbidden")):
+            r = APIClient().post("/api/worker_register/", {"full_name": "Peace A", "phone_number": "08071551236",
+                                                           "email": "Peace@Example.com", "password": "Str0ng-Passw0rd!",
+                                                           "profile_photo": image_file()}, format="multipart")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertIsNone(r.data["user"]["worker_profile"]["profile_photo"])

@@ -66,8 +66,19 @@ class _RegistrationView(APIView):
                 role=self.role,
             )
             model = Worker if self.role == ROLE_WORKER else Employer
-            profile = model.objects.create(user=user, profile_photo=photo)
+            profile = model.objects.create(user=user)
             Wallet.objects.get_or_create(user=user)
+
+        if photo:
+            # A storage problem (e.g. wrong bucket keys) shouldn't stop someone signing up:
+            # they keep the account and can add a photo later.
+            try:
+                with transaction.atomic():
+                    profile.profile_photo = photo
+                    profile.save(update_fields=["profile_photo"])
+            except Exception:
+                profile.profile_photo = None
+                logger.exception(f"Profile photo upload failed for user_id={user.id}; check the storage (S3) settings")
 
         logger.info(f"{self.role.title()} registered user_id={user.id}")
         return Response(
