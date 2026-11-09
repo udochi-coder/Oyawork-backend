@@ -48,8 +48,22 @@ class ConversationViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, Gene
         after = request.query_params.get("after")
         if after:
             msgs = msgs.filter(pk__gt=after)
-        convo.messages.filter(read_at__isnull=True).exclude(sender=request.user).update(read_at=timezone.now())
+        if convo.messages.filter(read_at__isnull=True).exclude(sender=request.user).update(read_at=timezone.now()):
+            # The chat has been seen, so its "New message" notifications are read too.
+            from core.models import Notification
+
+            Notification.objects.filter(user=request.user, kind="message", data__conversation=convo.pk,
+                                        is_read=False).update(is_read=True)
         return Response(MessageSerializer(msgs[:500], many=True, context={"request": request}).data)
+
+
+    @action(detail=False, methods=["get"])
+    def unread(self, request):
+        """Total unread messages across my chats (for the Messages tab badge)."""
+        count = Message.objects.filter(
+            Q(conversation__user_a=request.user) | Q(conversation__user_b=request.user), read_at__isnull=True
+        ).exclude(sender=request.user).count()
+        return Response({"unread": count})
 
 
 ConversationViewSet.create.__doc__ = "Open a chat with {user_id}."

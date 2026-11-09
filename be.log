@@ -1,0 +1,40 @@
+Watching for file changes with StatReloader
+Watching for file changes with StatReloader
+Performing system checks...
+
+System check identified no issues (0 silenced).
+November 09, 2026 - 15:55:21
+Django version 6.1.1, using settings 'OyaWork.settings'
+Starting WSGI development server at http://127.0.0.1:8000/
+Quit the server with CONTROL-C.
+
+WARNING: This is a development server. Do not use it in a production setting. Use a production WSGI or ASGI server instead.
+For more information on production servers see: https://docs.djangoproject.com/en/6.1/howto/deployment/
+2026-11-09 15:55:24.644 | INFO     | accounts.views:post:83 - Employer registered user_id=21
+[09/Nov/2026 15:55:24] "POST /api/employer_register/ HTTP/1.1" 201 1254
+2026-11-09 15:55:24.862 | INFO     | accounts.views:post:83 - Worker registered user_id=22
+[09/Nov/2026 15:55:24] "POST /api/worker_register/ HTTP/1.1" 201 1395
+[09/Nov/2026 15:55:24] "POST /api/conversations/ HTTP/1.1" 201 243
+[09/Nov/2026 15:55:24] "POST /api/conversations/3/messages/ HTTP/1.1" 201 138
+[09/Nov/2026 15:55:24] "POST /api/conversations/3/messages/ HTTP/1.1" 201 153
+[09/Nov/2026 15:55:24] "POST /api/conversations/3/messages/ HTTP/1.1" 201 151
+2026-11-09 15:55:35.023 | INFO     | accounts.views:post:83 - Employer registered user_id=23
+[09/Nov/2026 15:55:35] "POST /api/employer_register/ HTTP/1.1" 201 1254
+2026-11-09 15:55:35.233 | INFO     | accounts.views:post:83 - Worker registered user_id=24
+[09/Nov/2026 15:55:35] "POST /api/worker_register/ HTTP/1.1" 201 1395
+[09/Nov/2026 15:55:35] "POST /api/conversations/ HTTP/1.1" 201 243
+[09/Nov/2026 15:55:35] "POST /api/conversations/4/messages/ HTTP/1.1" 201 138
+[09/Nov/2026 15:55:35] "POST /api/conversations/4/messages/ HTTP/1.1" 201 153
+[09/Nov/2026 15:55:35] "POST /api/conversations/4/messages/ HTTP/1.1" 201 151
+[09/Nov/2026 15:55:37] "OPTIONS /api/me/ HTTP/1.1" 200 0
+[09/Nov/2026 15:55:37] "OPTIONS /api/me/ HTTP/1.1" 200 0
+[09/Nov/2026 15:55:37] "GET /api/me/ HTTP/1.1" 200 896
+[09/Nov/2026 15:55:37] "GET /api/me/ HTTP/1.1" 200 896
+[09/Nov/2026 15:55:37] "OPTIONS /api/conversations/unread/ HTTP/1.1" 200 0
+[09/Nov/2026 15:55:37] "OPTIONS /api/conversations/ HTTP/1.1" 200 0
+[09/Nov/2026 15:55:37] "OPTIONS /api/conversations/unread/ HTTP/1.1" 200 0
+[09/Nov/2026 15:55:37] "OPTIONS /api/conversations/ HTTP/1.1" 200 0
+[09/Nov/2026 15:55:37] "GET /api/conversations/unread/ HTTP/1.1" 200 12
+[09/Nov/2026 15:55:37] "GET /api/conversations/ HTTP/1.1" 200 332
+[09/Nov/2026 15:55:37] "GET /api/conversations/ HTTP/1.1" 200 332
+[09/Nov/2026 15:55:37] "GET /api/conversations/unread/ HTTP/1.1" 200 12
