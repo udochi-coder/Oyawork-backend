@@ -37,6 +37,10 @@ class Transaction(models.Model):
     bank_name = models.CharField(max_length=100, blank=True)
     account_number = models.CharField(max_length=20, blank=True)
     account_name = models.CharField(max_length=100, blank=True)
+    bank_code = models.CharField(max_length=20, blank=True)
+    # Paystack Transfers: set when the payout was sent automatically.
+    transfer_code = models.CharField(max_length=60, blank=True)
+    failure_reason = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

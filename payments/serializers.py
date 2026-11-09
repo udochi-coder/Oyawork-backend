@@ -17,6 +17,8 @@ class WithdrawSerializer(serializers.Serializer):
     bank_name = serializers.CharField(max_length=100)
     account_number = serializers.RegexField(r"^\d{10}$", error_messages={"invalid": "Enter your 10-digit NUBAN account number."})
     account_name = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    # Paystack bank code (from GET /api/wallet/banks/); needed for automatic payouts.
+    bank_code = serializers.CharField(max_length=20, required=False, allow_blank=True)
 
 
 class FundSerializer(serializers.Serializer):

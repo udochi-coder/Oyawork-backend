@@ -184,8 +184,107 @@ def valid_paystack_signature(body: bytes, signature: str) -> bool:
     return hmac.compare_digest(digest, signature)
 
 
+# --- Paystack Transfers (automatic withdrawals) -------------------------------
+
+def transfers_enabled():
+    return paystack_enabled() and settings.PAYSTACK_TRANSFERS
+
+
+def list_banks():
+    """Nigerian banks Paystack can pay into: [{"name", "code"}], cached for a day."""
+    from django.core.cache import cache
+
+    banks = cache.get("paystack_banks")
+    if banks is None:
+        data = _paystack("GET", "/bank", params={"country": "nigeria", "currency": "NGN", "perPage": 500})
+        banks = sorted(({"name": b["name"], "code": b["code"]} for b in data if b.get("active", True) and not b.get("is_deleted")),
+                       key=lambda b: b["name"].lower())
+        cache.set("paystack_banks", banks, 24 * 3600)
+    return banks
+
+
+def resolve_account(account_number, bank_code):
+    """Returns the account holder's name, or raises PaymentError."""
+    data = _paystack("GET", "/bank/resolve", params={"account_number": account_number, "bank_code": bank_code})
+    return data.get("account_name", "")
+
+
+def _fail_withdrawal(txn, reason):
+    """Mark a withdrawal failed and put the money back in the wallet (once)."""
+    with transaction.atomic():
+        txn = Transaction.objects.select_for_update().get(pk=txn.pk)
+        if txn.status == "failed":
+            return txn
+        txn.status = "failed"
+        txn.failure_reason = (reason or "")[:255]
+        txn.save(update_fields=["status", "failure_reason"])
+        user = txn.wallet.user
+        credit(user, -txn.amount, "refund", f"Withdrawal returned: {txn.reference}", reference=txn.reference)
+    notify(user, f"Withdrawal of ₦{-txn.amount:,.0f} didn't go through",
+           "The money is back in your OyaWork wallet. Check your bank details and try again.", kind="payment")
+    return txn
+
+
+def _succeed_withdrawal(txn):
+    with transaction.atomic():
+        txn = Transaction.objects.select_for_update().get(pk=txn.pk)
+        if txn.status != "pending":
+            return txn
+        txn.status = "success"
+        txn.save(update_fields=["status"])
+    notify(txn.wallet.user, f"₦{-txn.amount:,.0f} sent to your bank",
+           f"{txn.bank_name} {txn.account_number}", kind="payment")
+    return txn
+
+
+def payout_withdrawal(txn):
+    """Send a pending withdrawal to the person's bank with Paystack Transfers.
+    Paystack confirms with a transfer.success / transfer.failed webhook."""
+    try:
+        recipient = _paystack("POST", "/transferrecipient", json={
+            "type": "nuban", "name": txn.account_name or txn.wallet.user.full_name,
+            "account_number": txn.account_number, "bank_code": txn.bank_code, "currency": "NGN",
+        })
+        data = _paystack("POST", "/transfer", json={
+            "source": "balance",
+            "amount": int(-txn.amount * 100),  # kobo
+            "recipient": recipient["recipient_code"],
+            "reference": txn.reference.lower(),
+            "reason": "OyaWork wallet withdrawal",
+            "currency": "NGN",
+        })
+    except Exception as exc:
+        logger.error(f"Paystack transfer failed for {txn.reference}: {exc}")
+        return _fail_withdrawal(txn, str(exc))
+    txn.transfer_code = data.get("transfer_code", "")
+    status = data.get("status")
+    if status == "otp":
+        txn.failure_reason = "Paystack is waiting for an OTP. Turn off transfer OTP in Paystack Settings > Preferences, then finalize it in the Paystack dashboard."
+    txn.save(update_fields=["transfer_code", "failure_reason"])
+    if status == "success":
+        return _succeed_withdrawal(txn)
+    if status in ("failed", "reversed"):
+        return _fail_withdrawal(txn, data.get("reason") or f"Paystack transfer {status}")
+    return txn  # pending / otp: the webhook finishes it
+
+
+def _handle_transfer_event(event, data):
+    reference = (data.get("reference") or "").lower()
+    txn = Transaction.objects.filter(kind="withdrawal", reference__iexact=reference).first()
+    if not txn:
+        logger.warning(f"Paystack {event} for unknown reference {reference}")
+        return
+    if event == "transfer.success":
+        _succeed_withdrawal(txn)
+    else:
+        _fail_withdrawal(txn, data.get("reason") or event)
+
+
 def handle_webhook(payload):
-    if payload.get("event") != "charge.success":
+    event = payload.get("event")
+    if event in ("transfer.success", "transfer.failed", "transfer.reversed"):
+        return _handle_transfer_event(event, payload.get("data") or {})
+    if event != "charge.success":
         return
     reference = payload.get("data", {}).get("reference")
     intent = PaymentIntent.objects.filter(reference=reference).first()

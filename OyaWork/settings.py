@@ -237,6 +237,9 @@ DEMO_PAYMENTS = env_bool("DEMO_PAYMENTS", True)
 PAYSTACK_SECRET_KEY = os.getenv("PAYSTACK_SECRET_KEY", "")
 # Payment options shown on Paystack checkout, comma separated: bank_transfer, card, ussd, bank, qr.
 PAYSTACK_CHANNELS = env_list("PAYSTACK_CHANNELS", "bank_transfer")
+# Pay withdrawals out automatically with Paystack Transfers (needs an activated Paystack business,
+# enough Paystack balance, and transfer OTP turned off in Paystack Settings -> Preferences).
+PAYSTACK_TRANSFERS = env_bool("PAYSTACK_TRANSFERS", True)
 # SMS OTP for phone verification. Without a Termii key the code is returned in
 # the API response when DEMO_OTP is on (for testing only).
 TERMII_API_KEY = os.getenv("TERMII_API_KEY", "")
