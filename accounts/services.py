@@ -3,6 +3,7 @@ from django.db.models import Avg, Count
 from django.utils import timezone
 
 from accounts.models import Employer, VerificationDocument, Worker
+from core.utils import email_enabled, sms_enabled
 
 
 def verification_summary(user):
@@ -33,6 +34,9 @@ def verification_summary(user):
     auto_check = identity.enabled()
     summary = {
         "phone": "verified" if user.phone_verified else "missing",
+        "email": "verified" if user.email_verified else "missing",
+        # Which ways of receiving a code are switched on (test mode shows codes on screen).
+        "channels": {"sms": sms_enabled() or settings.DEMO_OTP, "email": email_enabled() or settings.DEMO_OTP},
         "identity": state(VerificationDocument.IDENTITY_TYPES),
         "face": state(VerificationDocument.FACE_TYPES),
         "address": state(VerificationDocument.ADDRESS_TYPES),

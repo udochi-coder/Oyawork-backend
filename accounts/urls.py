@@ -23,6 +23,8 @@ urlpatterns = [
     path("me/verification/", views.VerificationDocumentView.as_view(), name="me_verification"),
     path("me/verification/phone/send/", views.SendPhoneOTPView.as_view(), name="phone_otp_send"),
     path("me/verification/phone/verify/", views.VerifyPhoneOTPView.as_view(), name="phone_otp_verify"),
+    path("me/verification/email/send/", views.SendEmailCodeView.as_view(), name="email_code_send"),
+    path("me/verification/email/verify/", views.VerifyEmailCodeView.as_view(), name="email_code_verify"),
     # Public profiles + search
     path("workers/", views.WorkerSearchView.as_view(), name="worker_search"),
     path("workers/<int:pk>/", views.WorkerDetailView.as_view(), name="worker_detail"),

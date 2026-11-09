@@ -34,7 +34,7 @@ from accounts.services import ensure_profile, get_employer, get_worker, maybe_ac
 from core.constants import ROLE_EMPLOYER, ROLE_WORKER
 from core.models import PhoneOTP, User
 from core.permissions import IsEmployer, IsWorker
-from core.utils import haversine_km, normalize_phone, send_sms
+from core.utils import haversine_km, normalize_phone, send_email, send_sms, sms_enabled
 from payments.models import Wallet
 
 
@@ -315,11 +315,84 @@ class EmployerDetailView(generics.RetrieveAPIView):
         return ctx
 
 
-class PasswordResetRequestView(APIView):
-    """Step 1 of 'Forgot password': text a 6-digit code to the phone number.
+def _find_account(identifier):
+    """Look an account up by phone number or email address."""
+    identifier = (identifier or "").strip()
+    if "@" in identifier:
+        return User.objects.filter(email__iexact=identifier, is_active=True).first()
+    return User.objects.filter(phone_number=normalize_phone(identifier), is_active=True).first()
 
-    Always answers the same way whether or not the number has an account, so the
-    endpoint can't be used to find out who is registered."""
+
+def _new_code(user, purpose, target=""):
+    code = f"{secrets.randbelow(10**6):06d}"
+    PhoneOTP.objects.filter(user=user, purpose=purpose, used=False).update(used=True)
+    PhoneOTP.objects.create(user=user, purpose=purpose, target=target, code_hash=_hash_code(user.id, code),
+                            expires_at=timezone.now() + timedelta(minutes=10))
+    return code
+
+
+class SendEmailCodeView(APIView):
+    """Email a 6-digit code to confirm an email address (it becomes the account email once confirmed)."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "otp"
+
+    def post(self, request):
+        from django.core.validators import validate_email
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        user = request.user
+        email = (request.data.get("email") or user.email or "").strip().lower()
+        try:
+            validate_email(email)
+        except DjangoValidationError:
+            return Response({"email": ["Enter a valid email address."]}, status=400)
+        if User.objects.filter(email__iexact=email).exclude(pk=user.pk).exists():
+            return Response({"email": ["An account with this email already exists."]}, status=400)
+        code = _new_code(user, "email", target=email)
+        sent = send_email(email, f"Your OyaWork code: {code}",
+                          f"Hi {user.full_name.split()[0] if user.full_name else ''},\n\n"
+                          f"Your OyaWork email verification code is {code}. It expires in 10 minutes.\n\n"
+                          "If you didn't ask for this, you can ignore this email.")
+        body = {"sent": sent, "email": email}
+        if not sent and settings.DEMO_OTP:
+            body["demo_code"] = code
+        elif not sent:
+            return Response({"error": "We couldn't send the email. Please try again shortly."}, status=503)
+        return Response(body)
+
+
+class VerifyEmailCodeView(APIView):
+    def post(self, request):
+        user = request.user
+        code = str(request.data.get("code", "")).strip()
+        otp = PhoneOTP.objects.filter(user=user, purpose="email", used=False, expires_at__gt=timezone.now()).first()
+        if not otp:
+            return Response({"error": "The code has expired. Request a new one."}, status=400)
+        if otp.attempts >= 5:
+            otp.used = True
+            otp.save(update_fields=["used"])
+            return Response({"error": "Too many attempts. Request a new code."}, status=400)
+        if not secrets.compare_digest(otp.code_hash, _hash_code(user.id, code)):
+            otp.attempts += 1
+            otp.save(update_fields=["attempts"])
+            return Response({"error": "That code is not correct."}, status=400)
+        if User.objects.filter(email__iexact=otp.target).exclude(pk=user.pk).exists():
+            return Response({"error": "An account with this email already exists."}, status=400)
+        otp.used = True
+        otp.save(update_fields=["used"])
+        user.email = otp.target
+        user.email_verified = True
+        user.save(update_fields=["email", "email_verified", "updated_at"])
+        return Response(MeSerializer(user, context={"request": request}).data)
+
+
+class PasswordResetRequestView(APIView):
+    """Step 1 of 'Forgot password': send a 6-digit code by SMS (when Termii is set up) or to the
+    account's email (when Brevo is set up). The person can enter their phone number or email.
+
+    Always answers the same way whether or not an account exists, so the endpoint can't be used
+    to find out who is registered."""
 
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -327,22 +400,25 @@ class PasswordResetRequestView(APIView):
     throttle_scope = "otp"
 
     def post(self, request):
-        phone = normalize_phone(request.data.get("phone_number"))
-        body = {"sent": True, "phone_number": phone,
-                "detail": "If this number has an OyaWork account, we've sent it a reset code."}
-        user = User.objects.filter(phone_number=phone, is_active=True).first()
+        identifier = request.data.get("identifier") or request.data.get("email") or request.data.get("phone_number")
+        body = {"sent": True, "detail": "If this matches an OyaWork account, we've sent it a reset code."}
+        user = _find_account(identifier)
         if not user:
             return Response(body)
-        code = f"{secrets.randbelow(10**6):06d}"
-        PhoneOTP.objects.filter(user=user, purpose="reset", used=False).update(used=True)
-        PhoneOTP.objects.create(user=user, purpose="reset", code_hash=_hash_code(user.id, code),
-                                expires_at=timezone.now() + timedelta(minutes=10))
-        sent = send_sms(user.phone_number, f"Your OyaWork password reset code is {code}. It expires in 10 minutes. "
-                                           "If you didn't ask for this, ignore this message.")
+        code = _new_code(user, "reset")
+        message = (f"Your OyaWork password reset code is {code}. It expires in 10 minutes. "
+                   "If you didn't ask for this, ignore this message.")
+        sent = False
+        by_email = "@" in (identifier or "")
+        if not by_email and sms_enabled():
+            sent = send_sms(user.phone_number, message)
+        if not sent and user.email:
+            sent = send_email(user.email, f"Reset your OyaWork password: {code}",
+                              f"Hi {user.full_name.split()[0] if user.full_name else ''},\n\n{message}")
         if not sent and settings.DEMO_OTP:
             body["demo_code"] = code
         elif not sent:
-            return Response({"error": "We couldn't send the SMS. Please try again shortly."}, status=503)
+            logger.warning(f"Password reset code for user_id={user.id} could not be delivered (no SMS/email channel)")
         return Response(body)
 
 
@@ -358,11 +434,11 @@ class PasswordResetConfirmView(APIView):
         from django.contrib.auth.password_validation import validate_password
         from django.core.exceptions import ValidationError as DjangoValidationError
 
-        phone = normalize_phone(request.data.get("phone_number"))
+        identifier = request.data.get("identifier") or request.data.get("email") or request.data.get("phone_number")
         code = str(request.data.get("code", "")).strip()
         password = request.data.get("new_password") or ""
         invalid = Response({"code": ["That code is not correct or has expired."]}, status=400)
-        user = User.objects.filter(phone_number=phone, is_active=True).first()
+        user = _find_account(identifier)
         if not user:
             return invalid
         otp = PhoneOTP.objects.filter(user=user, purpose="reset", used=False, expires_at__gt=timezone.now()).first()
@@ -379,8 +455,6 @@ class PasswordResetConfirmView(APIView):
         otp.used = True
         otp.save(update_fields=["used"])
         user.set_password(password)
-        # Receiving the SMS proves they own the number.
-        user.phone_verified = True
-        user.save(update_fields=["password", "phone_verified", "updated_at"])
+        user.save(update_fields=["password", "updated_at"])
         logger.info(f"Password reset for user_id={user.id}")
         return Response({**tokens_for(user), "user": MeSerializer(user, context={"request": request}).data})

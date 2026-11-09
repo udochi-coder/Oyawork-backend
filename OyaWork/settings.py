@@ -242,6 +242,12 @@ TERMII_SENDER_ID = os.getenv("TERMII_SENDER_ID", "OyaWork")
 # "dnd" reaches Nigerian numbers on Do-Not-Disturb (recommended for codes); "generic" is cheaper but may not deliver to them.
 TERMII_CHANNEL = os.getenv("TERMII_CHANNEL", "dnd")
 DEMO_OTP = env_bool("DEMO_OTP", True)
+# Email codes (password reset, email verification) through Brevo's HTTP API.
+# Render's free plan blocks SMTP, so the API is used instead of an SMTP backend.
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+# Must be a sender address you've verified in Brevo (Senders, Domains & Dedicated IPs).
+EMAIL_FROM_ADDRESS = os.getenv("EMAIL_FROM_ADDRESS", "")
+EMAIL_FROM_NAME = os.getenv("EMAIL_FROM_NAME", "OyaWork")
 # Automatic NIN + selfie matching through Dojah. Leave the keys empty to review IDs by hand.
 DOJAH_APP_ID = os.getenv("DOJAH_APP_ID", "")
 DOJAH_SECRET_KEY = os.getenv("DOJAH_SECRET_KEY", "")

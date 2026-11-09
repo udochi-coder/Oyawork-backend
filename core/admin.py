@@ -6,11 +6,11 @@ from .models import Notification, User
 
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ("full_name", "phone_number", "email", "role", "phone_verified", "is_active")
+    list_display = ("full_name", "phone_number", "email", "role", "phone_verified", "email_verified", "is_active")
     list_filter = ("role", "is_active", "phone_verified", "is_staff")
     fieldsets = (
         (None, {"fields": ("phone_number", "email", "password")}),
-        ("Personal info", {"fields": ("full_name", "phone_verified")}),
+        ("Personal info", {"fields": ("full_name", "phone_verified", "email_verified")}),
         ("Permissions", {"fields": ("is_active", "is_staff", "is_superuser", "role", "groups", "user_permissions")}),
         ("Important dates", {"fields": ("last_login", "created_at", "updated_at")}),
     )

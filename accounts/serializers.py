@@ -108,10 +108,15 @@ class MeSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "id", "full_name", "phone_number", "email", "role", "phone_verified",
+            "id", "full_name", "phone_number", "email", "email_verified", "role", "phone_verified",
             "worker_profile", "employer_profile", "verification", "created_at",
         ]
-        read_only_fields = ["id", "phone_number", "role", "phone_verified", "created_at"]
+        read_only_fields = ["id", "phone_number", "role", "phone_verified", "email_verified", "created_at"]
+
+    def update(self, instance, validated_data):
+        if "email" in validated_data and (validated_data["email"] or None) != (instance.email or None):
+            instance.email_verified = False
+        return super().update(instance, validated_data)
 
     def get_worker_profile(self, user):
         worker = get_worker(user)

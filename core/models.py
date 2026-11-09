@@ -37,6 +37,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Email is optional in the sign-up screens; NULLs don't clash with the unique index.
     email = models.EmailField(unique=True, null=True, blank=True)
     phone_verified = models.BooleanField(default=False)
+    email_verified = models.BooleanField(default=False)
 
     # The role is the user's *current mode*. A person can hold both a worker and
     # an employer profile and switch between them (see accounts.views.SwitchModeView).
@@ -100,8 +101,10 @@ class Notification(models.Model):
 
 class PhoneOTP(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="phone_otps")
-    PURPOSE_CHOICES = [("verify", "Phone verification"), ("reset", "Password reset")]
+    PURPOSE_CHOICES = [("verify", "Phone verification"), ("reset", "Password reset"), ("email", "Email verification")]
     purpose = models.CharField(max_length=10, choices=PURPOSE_CHOICES, default="verify")
+    # For email verification: the address the code was sent to (becomes the account email once confirmed).
+    target = models.CharField(max_length=254, blank=True)
     code_hash = models.CharField(max_length=128)
     attempts = models.PositiveSmallIntegerField(default=0)
     expires_at = models.DateTimeField()

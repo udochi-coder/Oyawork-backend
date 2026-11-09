@@ -79,3 +79,45 @@ def send_sms(phone, message):
     except Exception as exc:
         logger.error(f"Termii SMS failed for {phone}: {exc}")
         return False
+
+
+def sms_enabled():
+    return bool(settings.TERMII_API_KEY)
+
+
+def email_enabled():
+    return bool(settings.BREVO_API_KEY and settings.EMAIL_FROM_ADDRESS)
+
+
+def send_email(to, subject, text):
+    """Send a plain email through Brevo when configured. Returns True when Brevo accepted it."""
+    if not to:
+        return False
+    if not email_enabled():
+        logger.info(f"[Email not sent: BREVO_API_KEY / EMAIL_FROM_ADDRESS missing] {to}: {subject}")
+        return False
+    import html
+
+    import requests
+
+    body_html = "".join(f"<p>{html.escape(line)}</p>" for line in text.split("\n\n"))
+    try:
+        resp = requests.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={"api-key": settings.BREVO_API_KEY, "accept": "application/json"},
+            json={
+                "sender": {"name": settings.EMAIL_FROM_NAME, "email": settings.EMAIL_FROM_ADDRESS},
+                "to": [{"email": to}],
+                "subject": subject,
+                "textContent": text,
+                "htmlContent": f"<html><body style=\"font-family:Arial,sans-serif;color:#111827\">{body_html}</body></html>",
+            },
+            timeout=10,
+        )
+        if resp.status_code >= 400:
+            logger.error(f"Brevo email failed for {to}: {resp.status_code} {resp.text[:300]}")
+            return False
+        return True
+    except Exception as exc:
+        logger.error(f"Brevo email failed for {to}: {exc}")
+        return False
